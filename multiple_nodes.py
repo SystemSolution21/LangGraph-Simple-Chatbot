@@ -27,13 +27,6 @@ class MessageClassifier(BaseModel):
 
 # Message State
 class State(TypedDict):
-    """
-    Represents the state of the conversation graph.
-
-    Attributes:
-        messages: A list of messages, managed by `add_messages` to append new messages.
-    """
-
     messages: Annotated[list, add_messages]
     message_type: str | None
 
