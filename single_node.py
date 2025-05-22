@@ -75,8 +75,8 @@ def main() -> None:
     the user types 'q' to quit.
     """
     while True:
-        user_input: str = input("Ask any question to the chatbot (type 'q' to quit): ")
-        if user_input != "q":
+        user_input: str = input("Ask any question to the chatbot (type 'x' to exit): ")
+        if user_input != "x":
             # Run graph
             state: dict[str, Any] | Any = graph.invoke(
                 input={"messages": [{"role": "user", "content": user_input}]}
@@ -86,6 +86,7 @@ def main() -> None:
             print(state["messages"][-1].content)
 
         else:
+            print("Exiting...")
             break
 
 
