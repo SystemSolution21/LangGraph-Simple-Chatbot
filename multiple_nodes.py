@@ -1,3 +1,14 @@
+"""
+A chatbot application demonstrating a multi-node LangGraph setup.
+
+This script defines a stateful graph that classifies user messages
+and routes them to different specialized agents (therapist or logical)
+based on the classification. It uses LangChain for language model
+interaction and Pydantic for data validation. The conversation state
+is managed by LangGraph, allowing for complex conversational flows.
+The script provides a command-line interface for user interaction.
+"""
+
 from typing import Annotated, Any, Literal
 from typing_extensions import TypedDict
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -19,20 +30,43 @@ llm: BaseChatModel = init_chat_model(model="gemma3:4b", model_provider="ollama")
 
 # Message classifier structured output
 class MessageClassifier(BaseModel):
+    """
+    Defines the structured output for message classification.
+
+    Attributes:
+        message_type: Classifies the message as either "emotional" or "logical".
+    """
+
     message_type: Literal["emotional", "logical"] = Field(
         default=...,
         description="Classify if the messages require an emotional(therapist) or logical response.",
     )
 
 
-# Message State
 class State(TypedDict):
+    """
+    Represents the state of the conversation graph.
+
+    Attributes:
+        messages: A list of messages, managed by `add_messages` to append new messages.
+        message_type: The classified type of the latest message ("emotional", "logical", or None).
+    """
+
     messages: Annotated[list, add_messages]
     message_type: str | None
 
 
 # Message Classifier Agent
-def message_classify_agent(state: State) -> dict[str, Any]:
+def message_classify_agent(state: State) -> dict[str, Any | None]:
+    """
+    Classifies the latest user message as either 'emotional' or 'logical'.
+
+    Args:
+        state: The current state of the graph, containing the message history.
+
+    Returns:
+        A dictionary updating the 'message_type' in the state.
+    """
     latest_message = state["messages"][-1]
     message_classifier_llm = llm.with_structured_output(schema=MessageClassifier)
     response: dict[str, Any] | BaseModel = message_classifier_llm.invoke(
@@ -48,11 +82,25 @@ def message_classify_agent(state: State) -> dict[str, Any]:
         ]
     )
 
-    return {"message_type": response.message_type}  # type: ignore
+    # Handle both dict and BaseModel response types
+    if isinstance(response, dict):
+        message_type = response.get("message_type")
+    else:
+        message_type = getattr(response, "message_type", None)
+    return {"message_type": message_type}
 
 
 # Rout messages type
 def router(state: State) -> dict[str, str]:
+    """
+    Determines the next node in the graph based on the classified message type.
+
+    Args:
+        state: The current state of the graph, containing the classified 'message_type'.
+
+    Returns:
+        A dictionary indicating the next node to transition to ('therapist' or 'logical').
+    """
     message_type: str | None = state.get("message_type", "logical")
     if message_type == "emotional":
         return {"next": "therapist"}
@@ -62,6 +110,15 @@ def router(state: State) -> dict[str, str]:
 
 # Therapist Agent
 def therapist_agent(state: State) -> dict[str, list[dict[str, Any]]]:
+    """
+    Handles messages classified as 'emotional' by providing a compassionate, therapeutic response.
+
+    Args:
+        state: The current state of the graph, containing the message history.
+
+    Returns:
+        A dictionary with the therapist LLM's response appended to the messages list.
+    """
     latest_message = state["messages"][-1]
     messages = [
         {
@@ -79,6 +136,15 @@ def therapist_agent(state: State) -> dict[str, list[dict[str, Any]]]:
 
 # Logical Agent
 def logical_agent(state: State) -> dict[str, list[dict[str, Any]]]:
+    """
+    Handles messages classified as 'logical' by providing a factual, information-based response.
+
+    Args:
+        state: The current state of the graph, containing the message history.
+
+    Returns:
+        A dictionary with the logical LLM's response appended to the messages list.
+    """
     latest_message = state["messages"][-1]
     messages = [
         {
@@ -122,6 +188,15 @@ graph: CompiledStateGraph = state_graph.compile()
 
 # Main entrypoint
 def main() -> None:
+    """
+    Runs the main interaction loop for the multi-agent chatbot.
+
+    Initializes the conversation state and continuously prompts the user
+    for input. Each input is processed by the LangGraph, which classifies
+    the message and routes it to the appropriate agent (therapist or logical).
+    The agent's response is then printed to the console.
+    The loop continues until the user types 'x' to exit.
+    """
     state: dict[str, Any] = {"messages": [], "message_type": None}
     while True:
         user_input: str = input("Ask any question to the chatbot (type 'x' to exit): ")
